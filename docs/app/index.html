@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenVault Web — Zero-Knowledge Password Manager</title>
+  <meta name="description" content="100% Free, privacy-first, zero-knowledge password manager and 2FA authenticator for desktop and PC browsers." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#131B2E">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+
+  <!-- Fullscreen Auth Screen (Setup or Unlock) -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo">🛡️</div>
+        <h1 id="auth-title">Unlock OpenVault</h1>
+        <p id="auth-desc">Enter your master password to decrypt your zero-knowledge vault.</p>
+      </div>
+
+      <form id="auth-form">
+        <!-- Setup Mode Fields -->
+        <div id="setup-fields" style="display: none; flex-direction: column; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Master Password</label>
+            <div class="input-with-action">
+              <input type="password" id="setup-password" class="input-field" placeholder="Create a strong master password..." autocomplete="new-password" />
+              <button type="button" id="btn-toggle-setup-pwd" class="input-suffix-btn" title="Toggle visibility">👁️</button>
+            </div>
+            <div id="setup-strength-box" style="margin-top: 6px; font-size: 0.8rem; display: flex; align-items: center; justify-content: space-between;">
+              <span id="setup-strength-label" style="color: var(--text-sub);">Strength: Empty</span>
+              <span id="setup-entropy-label" style="color: var(--text-sub); font-family: var(--font-mono);">0 bits</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Confirm Master Password</label>
+            <input type="password" id="setup-confirm-password" class="input-field" placeholder="Repeat your master password..." autocomplete="new-password" />
+          </div>
+
+          <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm); padding: 10px; font-size: 0.8rem; color: #F59E0B;">
+            ⚠️ <strong>Zero-Knowledge Notice:</strong> We never store or transmit your master password. If you forget it, your data cannot be recovered.
+          </div>
+        </div>
+
+        <!-- Unlock Mode Fields -->
+        <div id="unlock-fields" style="display: flex; flex-direction: column; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label">Master Password</label>
+            <div class="input-with-action">
+              <input type="password" id="unlock-password" class="input-field" placeholder="Enter master password..." autocomplete="current-password" autofocus />
+              <button type="button" id="btn-toggle-unlock-pwd" class="input-suffix-btn" title="Toggle visibility">👁️</button>
+            </div>
+            <div id="caps-lock-warning" style="display: none; color: #F59E0B; font-size: 0.78rem; margin-top: 4px;">
+              ⚠️ Caps Lock is ON
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <button type="submit" id="btn-auth-submit" class="btn-primary" style="width: 100%;">
+            <span>Unlock Vault</span> 🔓
+          </button>
+        </div>
+      </form>
+
+      <div style="text-align: center; margin-top: 10px;">
+        <button type="button" id="btn-switch-auth-mode" style="background: none; border: none; color: var(--text-sub); font-size: 0.82rem; cursor: pointer; text-decoration: underline;">
+          New to OpenVault? Create a new vault
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Application Workspace (Dual-Pane Desktop) -->
+  <div id="app-container" style="display: none;">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-shield">🛡️</div>
+        <div>
+          <div class="logo-title">OpenVault</div>
+          <div class="logo-sub">Zero-Knowledge Web</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Vault</div>
+        <div class="nav-item active" data-category="all">
+          <div class="nav-item-left"><span>📁</span> <span>All Items</span></div>
+          <span class="badge" id="badge-all">0</span>
+        </div>
+        <div class="nav-item" data-category="favorites">
+          <div class="nav-item-left"><span>⭐</span> <span>Favorites</span></div>
+          <span class="badge" id="badge-favorites">0</span>
+        </div>
+        <div class="nav-item" data-category="logins">
+          <div class="nav-item-left"><span>🔑</span> <span>Logins</span></div>
+          <span class="badge" id="badge-logins">0</span>
+        </div>
+        <div class="nav-item" data-category="notes">
+          <div class="nav-item-left"><span>📝</span> <span>Secure Notes</span></div>
+          <span class="badge" id="badge-notes">0</span>
+        </div>
+        <div class="nav-item" data-category="cards">
+          <div class="nav-item-left"><span>💳</span> <span>Cards</span></div>
+          <span class="badge" id="badge-cards">0</span>
+        </div>
+        <div class="nav-item" data-category="identities">
+          <div class="nav-item-left"><span>🪪</span> <span>Identities</span></div>
+          <span class="badge" id="badge-identities">0</span>
+        </div>
+
+        <div class="nav-section-title" style="margin-top: 12px;">Tools</div>
+        <div class="nav-item" id="nav-generator">
+          <div class="nav-item-left"><span>⚡</span> <span>Password Generator</span></div>
+        </div>
+        <div class="nav-item" id="nav-audit">
+          <div class="nav-item-left"><span>🛡️</span> <span>Security Audit</span></div>
+          <span class="badge" id="badge-audit-score" style="background: rgba(16,185,129,0.2); color: var(--accent-emerald);">100%</span>
+        </div>
+
+        <div class="nav-section-title" style="margin-top: 12px;">Settings</div>
+        <div class="nav-item" id="nav-settings">
+          <div class="nav-item-left"><span>⚙️</span> <span>Preferences & Sync</span></div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="btn-manual-lock" class="btn-lock" title="Lock vault immediately (Ctrl+L)">
+          <span>🔒</span> <span>Lock Vault (Ctrl+L)</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Item List Pane -->
+    <section class="item-pane">
+      <div class="search-header">
+        <div class="search-bar-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="search-input" class="search-input" placeholder="Search vault... (Ctrl+F)" autocomplete="off" />
+        </div>
+        <div class="action-bar">
+          <span id="item-count-label" class="item-count-label">0 items</span>
+          <button id="btn-open-add-modal" class="btn-add" title="Add new item (Ctrl+N)">
+            <span>+</span> <span>New Item</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="item-list" class="item-list">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+    <!-- Detail & Preview Pane -->
+    <main class="detail-pane" id="detail-pane">
+      <div id="empty-detail-state" class="empty-detail">
+        <div class="empty-detail-icon">🔐</div>
+        <h3>No Item Selected</h3>
+        <p>Select a credential from the list or click "+ New Item" to store passwords, secure notes, or 2FA codes.</p>
+      </div>
+
+      <div id="active-detail-content" class="detail-content" style="display: none;">
+        <!-- Dynamic Item Detail -->
+        <div class="detail-header">
+          <div class="detail-header-left">
+            <div id="detail-avatar" class="detail-avatar">🔑</div>
+            <div class="detail-title-wrap">
+              <h2 id="detail-title">Item Title</h2>
+              <div id="detail-category-badge" class="badge" style="margin-top: 4px;">Logins</div>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button id="btn-detail-fav" class="btn-icon" title="Toggle Favorite">⭐</button>
+            <button id="btn-detail-edit" class="btn-secondary">✏️ Edit</button>
+            <button id="btn-detail-delete" class="btn-danger-outline">🗑️ Delete</button>
+          </div>
+        </div>
+
+        <!-- 2FA / TOTP Card (Shown only if item has TOTP) -->
+        <div id="detail-totp-card" class="totp-card" style="display: none;">
+          <div class="totp-left">
+            <span class="field-label" style="color: var(--accent-emerald);">One-Time Password (2FA)</span>
+            <div class="totp-code-display" id="detail-totp-code">------</div>
+          </div>
+          <div class="totp-timer-box">
+            <div class="totp-circle-wrap">
+              <svg class="totp-svg" width="44" height="44" viewBox="0 0 44 44">
+                <circle class="totp-bg-circle" cx="22" cy="22" r="18" fill="none" />
+                <circle id="totp-progress-ring" class="totp-progress-circle" cx="22" cy="22" r="18" fill="none" stroke-dasharray="113.1" stroke-dashoffset="0" />
+              </svg>
+              <div id="totp-seconds-text" class="totp-seconds-label">30</div>
+            </div>
+            <button id="btn-copy-totp" class="btn-icon" title="Copy 2FA Code">📋</button>
+          </div>
+        </div>
+
+        <!-- Username / Email Field -->
+        <div id="field-username-card" class="field-card">
+          <span class="field-label">Username / Email</span>
+          <div class="field-value-row">
+            <span id="detail-username" class="field-value">-</span>
+            <button id="btn-copy-username" class="btn-icon" title="Copy Username">📋</button>
+          </div>
+        </div>
+
+        <!-- Password Field -->
+        <div id="field-password-card" class="field-card">
+          <span class="field-label">Password</span>
+          <div class="field-value-row">
+            <span id="detail-password" class="field-value">••••••••••••</span>
+            <div class="field-btn-group">
+              <button id="btn-toggle-pwd-visibility" class="btn-icon" title="Show / Hide Password">👁️</button>
+              <button id="btn-copy-password" class="btn-icon" title="Copy Password">📋</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Website URL Field -->
+        <div id="field-url-card" class="field-card">
+          <span class="field-label">Website URL</span>
+          <div class="field-value-row">
+            <span id="detail-url" class="field-value">-</span>
+            <div class="field-btn-group">
+              <a id="link-external-url" href="#" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Open website in new tab">↗️</a>
+              <button id="btn-copy-url" class="btn-icon" title="Copy URL">📋</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Fields Container -->
+        <div id="detail-custom-fields-container" style="display: flex; flex-direction: column; gap: 12px;">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- Notes Card -->
+        <div id="field-notes-card" class="field-card">
+          <span class="field-label">Secure Notes</span>
+          <div id="detail-notes" style="font-size: 0.95rem; white-space: pre-wrap; color: var(--text-muted); user-select: text; margin-top: 4px;">-</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Create / Edit Item -->
+  <div id="modal-item" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-item-title">Add Item</h3>
+        <button class="modal-close" data-close="modal-item">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="form-item-id" />
+        
+        <div class="form-group">
+          <label class="form-label">Title *</label>
+          <input type="text" id="form-item-name" class="input-field" placeholder="e.g. GitHub, ProtonMail, Bank..." required />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div class="form-group">
+            <label class="form-label">Category</label>
+            <select id="form-item-category" class="input-field">
+              <option value="logins">Logins</option>
+              <option value="notes">Secure Notes</option>
+              <option value="cards">Cards</option>
+              <option value="identities">Identities</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Favorite</label>
+            <label style="display: flex; align-items: center; gap: 8px; padding-top: 8px; cursor: pointer;">
+              <input type="checkbox" id="form-item-fav" style="transform: scale(1.2);" />
+              <span>Mark as favorite</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Username / Email</label>
+          <input type="text" id="form-item-username" class="input-field" placeholder="user@example.com" />
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <label class="form-label">Password</label>
+            <button type="button" id="btn-quick-gen-pwd" style="background: none; border: none; color: var(--primary); font-size: 0.8rem; cursor: pointer; font-weight: 600;">
+              ⚡ Generate Strong Password
+            </button>
+          </div>
+          <div class="input-with-action">
+            <input type="password" id="form-item-password" class="input-field" placeholder="Password..." />
+            <button type="button" id="btn-form-toggle-pwd" class="input-suffix-btn">👁️</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Website URL</label>
+          <input type="url" id="form-item-url" class="input-field" placeholder="https://example.com" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">2FA / TOTP Authenticator Key or URI</label>
+          <input type="text" id="form-item-totp" class="input-field" placeholder="Base32 Secret (e.g. JBSWY3DPEHPK3PXP) or otpauth://totp/..." />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Secure Notes</label>
+          <textarea id="form-item-notes" class="input-field" rows="3" placeholder="Additional private notes..."></textarea>
+        </div>
+
+        <!-- Custom Fields Section -->
+        <div style="margin-top: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label">Custom Fields</label>
+            <button type="button" id="btn-add-custom-field" class="btn-secondary" style="padding: 4px 10px; font-size: 0.78rem;">
+              + Add Custom Field
+            </button>
+          </div>
+          <div id="form-custom-fields-list" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" data-close="modal-item">Cancel</button>
+        <button id="btn-save-item" class="btn-primary">Save Item</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Password Generator -->
+  <div id="modal-generator" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Password & Passphrase Generator</h3>
+        <button class="modal-close" data-close="modal-generator">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Generator Result Box -->
+        <div style="background: var(--bg); border: 1px solid var(--surface-border); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <span id="gen-output" style="font-family: var(--font-mono); font-size: 1.25rem; font-weight: 700; word-break: break-all; color: var(--accent-emerald); user-select: text;">
+              GeneratedPassword
+            </span>
+            <div style="display: flex; gap: 6px;">
+              <button id="btn-gen-refresh" class="btn-icon" title="Regenerate">🔄</button>
+              <button id="btn-gen-copy" class="btn-icon" title="Copy to clipboard">📋</button>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; border-top: 1px solid var(--surface-border); padding-top: 8px;">
+            <span id="gen-strength-badge" class="badge" style="background: rgba(16,185,129,0.2); color: var(--accent-emerald);">Very Strong</span>
+            <span id="gen-crack-time" style="color: var(--text-muted);">Crack Time: Centuries</span>
+            <span id="gen-entropy-val" style="font-family: var(--font-mono); color: var(--text-sub);">95 bits</span>
+          </div>
+        </div>
+
+        <!-- Mode Toggle -->
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+          <button id="btn-gen-mode-pwd" class="btn-primary" style="flex: 1; padding: 8px;">Random Password</button>
+          <button id="btn-gen-mode-passphrase" class="btn-secondary" style="flex: 1; padding: 8px;">Diceware Passphrase</button>
+        </div>
+
+        <!-- Random Password Controls -->
+        <div id="gen-controls-pwd" style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+              <span>Password Length: <strong id="gen-length-val">18</strong></span>
+            </div>
+            <input type="range" id="gen-slider-length" min="8" max="64" value="18" style="width: 100%; accent-color: var(--primary);" />
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-opt-upper" checked />
+              <span>Uppercase (A-Z)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-opt-lower" checked />
+              <span>Lowercase (a-z)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-opt-digits" checked />
+              <span>Numbers (0-9)</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-opt-symbols" checked />
+              <span>Symbols (!@#$)</span>
+            </label>
+          </div>
+
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.85rem; color: var(--text-muted);">
+            <input type="checkbox" id="gen-opt-avoid-ambig" checked />
+            <span>Avoid ambiguous characters (0, O, 1, l, I)</span>
+          </label>
+        </div>
+
+        <!-- Passphrase Controls -->
+        <div id="gen-controls-passphrase" style="display: none; flex-direction: column; gap: 12px; margin-top: 10px;">
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px;">
+              <span>Word Count: <strong id="gen-words-val">4</strong></span>
+            </div>
+            <input type="range" id="gen-slider-words" min="3" max="8" value="4" style="width: 100%; accent-color: var(--primary);" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Separator</label>
+            <select id="gen-passphrase-sep" class="input-field">
+              <option value="-">Hyphen (-)</option>
+              <option value=" ">Space ( )</option>
+              <option value=".">Period (.)</option>
+              <option value="_">Underscore (_)</option>
+            </select>
+          </div>
+
+          <div style="display: flex; gap: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-passphrase-cap" checked />
+              <span>Capitalize Words</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="gen-passphrase-num" checked />
+              <span>Include Number</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" data-close="modal-generator">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Security Audit -->
+  <div id="modal-audit" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Vault Security Audit</h3>
+        <button class="modal-close" data-close="modal-audit">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 24px; padding: 14px; background: var(--bg); border-radius: var(--radius-md); border: 1px solid var(--surface-border);">
+          <div style="font-size: 3rem; font-weight: 800; font-family: var(--font-mono); color: var(--accent-emerald);" id="audit-score-number">100%</div>
+          <div>
+            <h4 style="font-size: 1.1rem; font-weight: 700;">Overall Vault Health</h4>
+            <p style="font-size: 0.85rem; color: var(--text-muted);" id="audit-score-desc">All passwords adhere to modern security standards.</p>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 10px;">
+          <!-- Weak Passwords List -->
+          <div>
+            <h4 style="font-size: 0.9rem; margin-bottom: 6px; color: var(--danger);">⚠️ Weak Passwords (<span id="audit-weak-count">0</span>)</h4>
+            <div id="audit-weak-list" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
+          </div>
+
+          <!-- Reused Passwords List -->
+          <div>
+            <h4 style="font-size: 0.9rem; margin-bottom: 6px; color: var(--warning);">🔁 Reused Across Accounts (<span id="audit-reused-count">0</span>)</h4>
+            <div id="audit-reused-list" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
+          </div>
+
+          <!-- Missing 2FA List -->
+          <div>
+            <h4 style="font-size: 0.9rem; margin-bottom: 6px; color: var(--primary);">🛡️ Missing 2FA / TOTP (<span id="audit-totp-count">0</span>)</h4>
+            <div id="audit-totp-list" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" data-close="modal-audit">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Settings & Sync -->
+  <div id="modal-settings" class="modal-overlay" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Preferences & Backup</h3>
+        <button class="modal-close" data-close="modal-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Auto-Lock Inactivity Timeout</label>
+          <select id="pref-autolock" class="input-field">
+            <option value="1">1 minute</option>
+            <option value="5" selected>5 minutes</option>
+            <option value="15">15 minutes</option>
+            <option value="30">30 minutes</option>
+            <option value="0">Never (until tab closed)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Clear Sensitive Clipboard After</label>
+          <select id="pref-clipboard" class="input-field">
+            <option value="15">15 seconds</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Theme</label>
+          <select id="pref-theme" class="input-field">
+            <option value="dark" selected>Dark Navy (Default)</option>
+            <option value="light">Light Slate</option>
+          </select>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid var(--surface-border); margin: 10px 0;" />
+
+        <h4 style="font-size: 0.95rem; font-weight: 700;">Cross-Platform Backup & Restore</h4>
+        <p style="font-size: 0.82rem; color: var(--text-muted);">
+          Compatible with <strong>OpenVault Android</strong>. Encrypted backups protect all your logins with AES-256-GCM and PBKDF2 600k rounds.
+        </p>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <button id="btn-export-backup" class="btn-primary" style="font-size: 0.85rem; padding: 8px;">
+            💾 Export .openvault
+          </button>
+          <button id="btn-import-backup" class="btn-secondary" style="font-size: 0.85rem; padding: 8px;">
+            📥 Import Backup File
+          </button>
+          <input type="file" id="file-import-input" accept=".openvault,.json,.csv" style="display: none;" />
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <button id="btn-export-csv" class="btn-secondary" style="font-size: 0.8rem; padding: 6px 10px; color: var(--warning);">
+            Export Unencrypted CSV (Warning)
+          </button>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid var(--surface-border); margin: 10px 0;" />
+
+        <h4 style="font-size: 0.95rem; font-weight: 700; color: var(--danger);">Danger Zone</h4>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-change-password" class="btn-secondary" style="font-size: 0.85rem;">
+            Change Master Password
+          </button>
+          <button id="btn-wipe-vault" class="btn-danger-outline" style="font-size: 0.85rem;">
+            Permanently Wipe Vault
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-primary" data-close="modal-settings">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Main Application Script -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
+          console.warn('Service worker registration failed:', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
